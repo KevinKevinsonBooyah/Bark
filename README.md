@@ -1,23 +1,34 @@
 # Bark
 
-A small, original block-coding studio for making animations and games. Open **https://kevinkevinsonbooyah.github.io/Bark/**.
+An original browser block-coding studio with a brown theme, connected puzzle blocks, and a solid white starting stage.
 
-Bark's editor, interpreter, renderer, project model, and costume tools are implemented here from scratch with browser APIs. No PenguinMod, Scratch VM, Blockly, WebGL, external runtime, build dependency, CDN, or account is required. The previous PenguinMod-based version remains in Git history; it is no longer used by the deployed app.
+Open **https://kevinkevinsonbooyah.github.io/Bark/**.
 
-## Create
+The editor, runtime, renderer, project format, and costume studio are implemented in this repository. The deployed app does not use PenguinMod, Scratch VM, Blockly, a CDN, or an external runtime. Earlier versions remain in Git history.
 
-- Gold event hats start scripts on Run, a sprite tap, a key press, or a message.
-- Add blocks by tapping the library, or drag their dotted handles into an insertion gap. Select a block to move, duplicate, or delete it. Loop and condition pockets accept nested blocks.
-- White inputs accept values. Green reporter sockets support nested math, random numbers, variables, function input, comparisons, Boolean logic, timer, position, keyboard, touch, and approximate sprite collision sensing.
-- Custom blocks have one parameter; define a named block and call it with a value. Use the function-input reporter inside its definition. Recursion and instruction limits keep scripts cooperative.
-- Draw costumes using brush, eraser, line, rectangle, and ellipse tools. Multiple costumes, image import, duplication, transparent pixels, and undo are supported.
-- Run executes a copy of your project. Stop restores starting positions. The white stage is 480×360, with centered x/y coordinates. Drag sprites on the stopped stage to place them.
-- Phones have Code, Play, Costumes, and Sprites views. Both orientations are supported. Tap-to-place avoids precision dragging. Play includes arrow and Space controls.
-- The current project autosaves in local storage. Export `.bark` JSON files to back up all scripts and costume assets. Storage failures are shown rather than silently claiming success.
+## Editing
 
-## Develop
+Drag a block itself from the palette onto the canvas. Drop near a connection to snap it into a stack or a loop mouth. Drag an existing block to detach it with everything below it. Stacks can be placed anywhere; positions are saved. Drag reporters into white or Boolean sockets, and drag them back out. Pan blank space and use the zoom controls. Tap-to-add remains available for phones. Select a block to duplicate, move, delete, or reorder it; undo restores edits.
 
-Requires Node 20+ for tests/build; no npm installation is needed.
+The catalogue includes events, motion, looks, sound, control, sensing, operators, variables, lists, and custom blocks. `BLOCKS.md` lists every available definition. Expandable operator blocks have plus/minus inputs, and the expandable if block has additional else-if branches.
+
+Make a Block supports named number/text, Boolean, branch, and label inputs; colors; ending blocks; return values; and run-without-refresh. Use a named parameter reporter or Run branch inside its definition. Finite warp code executes without intermediate redraws; waits and the safety budget still yield. Reporter functions must finish without waiting.
+
+## Costumes and sounds
+
+The costume studio follows the supplied reference's arrangement: costume thumbnails, two toolbar rows, fill/outline controls, a tool rail, checkerboard canvas, and zoom/bitmap controls. It includes brush, eraser, shapes, text, selection, marquee, movement, resize, rotation, grouping, layer order, flips, center, clipboard operations, and brush-point reshape. Imported images become selectable objects. Merge, Mask, Subtract, and grayscale Filter rasterize their selected results; undo can restore the vectors.
+
+Sounds can be uploaded and previewed, with runtime playback, offsets, fade-out, volume, pitch, and stereo pan. The default Bark sound is synthesized. Microphone sensing is opt-in in the Sounds panel. Clipboard operations depend on browser permission. Named solid-color backdrops are managed beside the stage.
+
+## Mobile and saving
+
+Code, Play, Costumes, and Sprites have separate phone views. Touch pointers drive block dragging and drawing; on-screen arrow and Space controls support keyboard projects. Toolbars scroll on narrow screens and costumes initially fit the available space. Fresh projects start with a white 480×360 stage. Run uses a copy of saved starting state.
+
+Projects autosave locally. Export `.bark` files for backups. Bark's own format is not compatible with `.sb3` or `.pmp` projects. There is no account service: logged-in reports false and username is blank unless set in project data. Sprite collision is approximate; color sensing samples rendered pixels. The costume tools are an original implementation, not feature-for-feature PenguinMod paint parity: paths do not have Bézier handles, bitmap fill is object recoloring, and Boolean paint operations flatten their output. Regular expressions intentionally exclude groups, counted repetitions, and backreferences.
+
+## Development and validation
+
+No npm installation is needed. Use Node 20+:
 
 ```sh
 npm test
@@ -25,10 +36,4 @@ node build.mjs
 python3 -m http.server 8000 --directory dist
 ```
 
-GitHub Actions runs the tests, builds static files, and deploys `dist/` to Pages. `editor.html` remains an alias for old bookmarks.
-
-## Validation and limits
-
-13 interpreter/model tests cover nested control flow, cancellation, arithmetic, events, broadcasts, custom inputs, pointer sensing, glides, costumes, sound scheduling, project roundtrip, validation, and recursion limits. Browser checks exercised editing inputs, nesting, running, phone tap placement, costume drawing, and layouts at 390×844, 844×390, and 320×568. These are browser viewport checks, not a claim of testing on every physical phone.
-
-This is a new, smaller engine with its own project format. `.sb3` and `.pmp` imports are not supported. Custom blocks have one input and no return value; sound uses synthesized notes rather than recorded samples. Sprite collision uses approximate bounding circles. Imported project limits are 15 MB, 100 sprites, 100 costumes per sprite, and 2,500 code blocks. Device storage is browser-specific and may be cleared, so keep exports.
+GitHub Actions tests, builds, and deploys `dist/` to Pages. `editor.html` is an alias for old bookmarks. The test suite covers 35 interpreter and model scenarios, including nested reporters, loop control, custom return/branch inputs, cloning, broadcasts, lists, sound completion hooks, warp scheduling, and saved workspace coordinates. Browser checks cover free placement, stack snapping, nested reporter drops, editing, costume drawing/grouping, and phone layouts at 390×844, 320×568, and 844×390. These are viewport checks, not testing on every physical phone.
