@@ -1,0 +1,663 @@
+diff --git a/src/addons/settings-store-singleton.js b/src/addons/settings-store-singleton.js
+index 6d716c9..a425ce1 100644
+--- a/src/addons/settings-store-singleton.js
++++ b/src/addons/settings-store-singleton.js
+@@ -8,4 +8,13 @@ if (urlParameters.has('addons')) {
+     settingStore.readLocalStorage();
+ }
+ 
++// On first use of a touch device, collapse the palette by tapping a category.
++// Explicit saved preferences continue to take priority.
++if (window.matchMedia('(pointer: coarse)').matches &&
++    !Object.prototype.hasOwnProperty.call(settingStore.getAddonStorage('hide-flyout'), 'enabled')) {
++    settingStore.setAddonSetting('hide-flyout', 'toggle', 'category');
++    settingStore.setAddonSetting('hide-flyout', 'speed', 'none');
++    settingStore.setAddonEnabled('hide-flyout', true);
++}
++
+ export default settingStore;
+diff --git a/src/bark/toolbar.jsx b/src/bark/toolbar.jsx
+new file mode 100644
+index 0000000..793531d
+--- /dev/null
++++ b/src/bark/toolbar.jsx
+@@ -0,0 +1,115 @@
++import React from 'react';
++import {connect} from 'react-redux';
++import localforage from 'localforage';
++import {setProjectTitle} from '../reducers/project-title';
++import downloadBlob from '../lib/download-blob';
++const store = localforage.createInstance({name:'bark-projects'});
++const workspace = () => window.ScratchBlocks && window.ScratchBlocks.getMainWorkspace();
++class BarkToolbar extends React.Component {
++    constructor (props) {
++        super(props);
++        this.state = {status:'Recovery ready', recovery:null, projects:null, busy:false, query:'', reduced:false};
++        this.ready = false; this.dirty = false; this.checking = true;
++        this.change = () => {if(this.ready) this.dirty = true;};
++        this.loaded = () => {this.ready = true; this.dirty = true;};
++        this.key = e => {if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's'){e.preventDefault();this.save(true);}};
++    }
++    componentDidMount () {
++        const vm = this.props.vm;
++        vm.on('PROJECT_CHANGED',this.change); vm.runtime.on('PROJECT_LOADED',this.loaded);
++        this.ready = vm.runtime.targets.length > 0;
++        document.addEventListener('keydown',this.key);
++        document.body.classList.add('bark-editor');
++        if (matchMedia('(max-width:1000px) and (orientation:landscape)').matches) document.body.classList.add('bark-hide-stage');
++        try {const reduced = localStorage.getItem('bark:reduced-motion') === 'true';this.setState({reduced});document.body.classList.toggle('bark-reduced-motion',reduced);} catch(e) { /* optional preference */ }
++        store.getItem('recovery').then(recovery => {if(!this.disposed)this.setState({recovery,status:recovery?'Previous session available':'Recovery ready'});}).catch(() => this.setState({status:'Storage unavailable — use Export'})).finally(() => {this.checking=false;});
++        this.interval = setInterval(() => {if(this.ready && this.dirty && !this.state.recovery && !this.checking && !this.state.busy)this.save(false);},12000);
++    }
++    componentDidUpdate (prev) {if(prev.title !== this.props.title)this.dirty=true;}
++    componentWillUnmount () {
++        this.disposed=true;clearInterval(this.interval);
++        this.props.vm.removeListener('PROJECT_CHANGED',this.change);this.props.vm.runtime.removeListener('PROJECT_LOADED',this.loaded);
++        document.removeEventListener('keydown',this.key);document.body.classList.remove('bark-editor');
++    }
++    async save (manual) {
++        if(!this.ready || this.state.busy)return;
++        this.setState({busy:true,status:'Saving…'});this.dirty=false;
++        try {
++            const blob=await this.props.vm.saveProjectSb3();
++            const record={title:this.props.title || 'Bark project',time:Date.now(),data:await blob.arrayBuffer()};
++            if(manual)await store.setItem(`project:${record.title}`,record);
++            await store.setItem('recovery',record);
++            this.setState({status:manual?'Saved on this device':'Recovery saved',recovery:null});
++        } catch(e){this.dirty=true;this.setState({status:'Save failed — use Export',error:String(e.message || e)});}
++        finally {this.setState({busy:false});}
++    }
++    async exportProject () {
++        try {downloadBlob(`${this.props.title || 'Bark project'}.pmp`,await this.props.vm.saveProjectSb3());}
++        catch(e){this.setState({error:`Export failed: ${e.message || e}`});}
++    }
++    async loadRecord (record) {
++        if(!confirm(`Open “${record.title}”? Save or export your current work first if you want to keep it.`))return;
++        this.setState({busy:true});
++        try {this.props.vm.stopAll();await this.props.vm.loadProject(record.data);this.props.setTitle(record.title);this.setState({recovery:null,projects:null,status:'Project restored'});this.dirty=true;}
++        catch(e){this.setState({error:`Could not open project: ${e.message || e}`});}
++        finally {this.setState({busy:false});}
++    }
++    async openProjects () {
++        try {const projects=[];await store.iterate((v,k)=>{if(k.startsWith('project:'))projects.push({...v,key:k});});this.setState({projects:projects.sort((a,b)=>b.time-a.time)});}
++        catch(e){this.setState({error:'Device storage is unavailable. Import and export still work.'});}
++    }
++    async sample (name) {
++        if(!name || !confirm('Open this example? Save or export your current work first if you want to keep it.'))return;
++        this.setState({busy:true});
++        try {const response=await fetch(`${process.env.ROOT}samples/${name}.sb3`);if(!response.ok)throw new Error(`HTTP ${response.status}`);this.props.vm.stopAll();await this.props.vm.loadProject(await response.arrayBuffer());this.props.setTitle({bounce:'Bouncing Bark',broadcast:'Broadcast Party',touch:'Follow Your Finger'}[name]);this.setState({recovery:null,status:'Example opened — press Run'});}
++        catch(e){this.setState({error:`Example failed: ${e.message || e}`});}
++        finally {this.setState({busy:false});}
++    }
++    search () {
++        const ws=workspace(),query=this.state.query.toLowerCase().trim();if(!ws || !query)return;
++        const matches=ws.getAllBlocks(false).filter(b=>!b.isShadow() && b.toString().toLowerCase().includes(query));
++        if(!matches.length){this.setState({status:'No matches in this sprite'});return;}
++        this.matchIndex=this.lastQuery===query?((this.matchIndex+1)%matches.length):0;this.lastQuery=query;
++        const b=matches[this.matchIndex];b.select();if(ws.centerOnBlock)ws.centerOnBlock(b.id);
++        this.setState({status:`Match ${this.matchIndex+1} of ${matches.length}`});
++    }
++    panel (name) {document.body.classList.toggle(`bark-hide-${name}`);window.dispatchEvent(new Event('resize'));}
++    close () {this.setState({projects:null,help:false,error:null});}
++    render () {
++        const s=this.state;
++        return <React.Fragment>
++            <nav id="bark-tools" aria-label="Bark project tools">
++                <button className="bark-run" title="Run project" onClick={()=>this.props.vm.greenFlag()}>⚑ <span>Run</span></button>
++                <button className="bark-stop" title="Stop project" onClick={()=>this.props.vm.stopAll()}>■ <span>Stop</span></button>
++                <span className="bark-divider"/>
++                <button disabled={s.busy} title="Save on this device (Ctrl+S)" onClick={()=>this.save(true)}>Save</button>
++                <button onClick={()=>this.openProjects()}>Open saved</button>
++                <button disabled={s.busy} onClick={()=>this.exportProject()}>Export</button>
++                <select aria-label="Open an example project" value="" disabled={s.busy} onChange={e=>this.sample(e.target.value)}><option value="">Examples</option><option value="bounce">Bouncing Bark</option><option value="broadcast">Broadcast Party</option><option value="touch">Follow Your Finger</option></select>
++                <button title="Undo" onClick={()=>{const ws=workspace();if(ws)ws.undo(false);}}>↶</button><button title="Redo" onClick={()=>{const ws=workspace();if(ws)ws.undo(true);}}>↷</button>
++                <form className="bark-search" onSubmit={e=>{e.preventDefault();this.search();}}><input aria-label="Find blocks in this sprite’s scripts" placeholder="Find in scripts…" value={s.query} onChange={e=>this.setState({query:e.target.value})}/><button type="submit" title="Find next block">⌕</button></form>
++                <button onClick={()=>this.panel('stage')}>Stage</button><button onClick={()=>this.panel('sprites')}>Sprites</button>
++                <button onClick={()=>this.setState({help:true})}>Help</button><span className="bark-status" role="status">{s.status}</span>
++                {s.recovery && <button className="bark-recover" onClick={()=>this.loadRecord(s.recovery)}>Recover session</button>}
++            </nav>
++            <div id="bark-rotate"><div className="bark-phone">▯</div><h1>ROTATE YOUR DEVICE</h1><p>For the best Bark experience, rotate your phone sideways.</p></div>
++            {(s.projects!==null || s.help || s.error) && <div className="bark-modal-overlay" onClick={()=>this.close()}><section className="bark-dialog" role="dialog" aria-modal="true" aria-label={s.error?'Bark error':s.help?'Bark help':'Saved projects'} onClick={e=>e.stopPropagation()}>
++                <header><h2>{s.error?'Something went wrong':s.help?'Bark · Help & settings':'Saved on this device'}</h2><button autoFocus aria-label="Close dialog" onClick={()=>this.close()}>×</button></header>
++                <div className="bark-dialog-body">
++                {s.error && <p>{s.error}</p>}
++                {s.projects!==null && <React.Fragment><p>Device saves stay in this browser. Export a .pmp file to keep a portable backup.</p>{!s.projects.length && <p>No saved projects yet. Click Save to create one.</p>}{s.projects.map(p=><div className="bark-saved-project" key={p.key}><div><strong>{p.title}</strong><small>{new Date(p.time).toLocaleString()}</small></div><button disabled={s.busy} onClick={()=>this.loadRecord(p)}>Open</button><button onClick={async()=>{if(confirm(`Delete “${p.title}” from this device?`)){await store.removeItem(p.key);this.openProjects();}}}>Delete</button></div>)}</React.Fragment>}
++                {s.help && <React.Fragment>
++                    <p>Drag blocks from a category into the workspace. Snap a stack below a green-flag event and press Run. Rounded reporters fit inside inputs; hexagonal conditions fit Boolean slots.</p>
++                    <p><strong>My Blocks → Make a Block</strong> creates functions with number/text, Boolean and branch parameters, return values, custom colors and warp execution. Right-click a call to edit its definition.</p>
++                    <p><strong>On phones:</strong> rotate sideways. Stage and Sprites make room for coding. Long-press a block for its menu. Open the stage fullscreen to play. Sensing includes individual finger positions.</p>
++                    <p><strong>Files:</strong> File → Load from your computer imports .sb3 and .pmp. Export saves .pmp with scripts, costumes, sounds and functions. PenguinMod-specific blocks do not run in standard Scratch.</p>
++                    <p><strong>Shortcuts:</strong> Ctrl/Cmd+S saves on this device; Ctrl/Cmd+Z undoes. Search finds blocks in the selected sprite’s scripts. Recovery saves edited projects every 12 seconds. Recover session reopens the last session; saving a new project replaces recovery.</p>
++                    <label><input type="checkbox" checked={s.reduced} onChange={e=>{const reduced=e.target.checked;this.setState({reduced});document.body.classList.toggle('bark-reduced-motion',reduced);try{localStorage.setItem('bark:reduced-motion',String(reduced));}catch(err){}}}/> Reduce animations</label>
++                    <p>Microphone and clipboard blocks depend on browser permissions. Bark has no account, community upload or cloud-variable server. Optional extensions and asset libraries may contact their providers.</p>
++                    <p>Powered by PenguinMod, TurboWarp and Scratch. <a href="credits.html" target="_blank" rel="noopener noreferrer">Credits</a> · <a href="https://github.com/KevinKevinsonBooyah/Bark" target="_blank" rel="noopener noreferrer">Source, licenses & limitations</a></p>
++                </React.Fragment>}
++                </div></section></div>}
++        </React.Fragment>;
++    }
++}
++export default connect(s=>({title:s.scratchGui.projectTitle}),d=>({setTitle:title=>d(setProjectTitle(title))}))(BarkToolbar);
+diff --git a/src/components/gui/gui.css b/src/components/gui/gui.css
+index bcb4cf9..c3ab145 100644
+--- a/src/components/gui/gui.css
++++ b/src/components/gui/gui.css
+@@ -7,7 +7,7 @@
+ }
+ 
+ .body-wrapper {
+-    height: calc(100% - $menu-bar-height);
++    height: calc(100% - $menu-bar-height - 38px);
+     background-color: $ui-primary;
+ }
+ .body-wrapper-playground {
+@@ -49,7 +49,8 @@
+     */
+     flex-basis: calc(1024px - 408px - (($space + $stage-standard-border-width) * 2));
+     flex-grow: 1;
+-    flex-shrink: 0;
++    flex-shrink: 1;
++    min-width: 0;
+     position: relative;
+ 
+     display: flex;
+diff --git a/src/components/gui/gui.jsx b/src/components/gui/gui.jsx
+index a4f4453..ea70303 100644
+--- a/src/components/gui/gui.jsx
++++ b/src/components/gui/gui.jsx
+@@ -24,6 +24,7 @@ import StageWrapper from '../../containers/stage-wrapper.jsx';
+ import Loader from '../loader/loader.jsx';
+ import Box from '../box/box.jsx';
+ import MenuBar from '../menu-bar/menu-bar.jsx';
++import BarkToolbar from '../../bark/toolbar.jsx';
+ import CostumeLibrary from '../../containers/costume-library.jsx';
+ import BackdropLibrary from '../../containers/backdrop-library.jsx';
+ import Watermark from '../../containers/watermark.jsx';
+@@ -501,6 +502,7 @@ const GUIComponent = props => {
+                         onToggleLoginOpen={onToggleLoginOpen}
+                     />
+                 ) : null}
++                {!isPlayground && <BarkToolbar vm={vm} />}
+                 <Box className={classNames(styles.bodyWrapper, isPlayground ? styles.bodyWrapperPlayground : null)}>
+                     <Box className={styles.flexWrapper}>
+                         <Box className={styles.editorWrapper}>
+diff --git a/src/components/menu-bar/menu-bar.jsx b/src/components/menu-bar/menu-bar.jsx
+index 8218c72..3e3219f 100644
+--- a/src/components/menu-bar/menu-bar.jsx
++++ b/src/components/menu-bar/menu-bar.jsx
+@@ -477,16 +477,16 @@ class MenuBar extends React.Component {
+             >
+                 <div className={styles.mainMenu}>
+                     <div className={styles.fileGroup}>
+-                        {this.props.onClickLogo ? (
++                        {true ? (
+                             <div className={classNames(styles.menuBarItem)}>
+                                 <img
+-                                    alt="Scratch"
++                                    alt="Bark"
+                                     className={classNames(styles.scratchLogo, {
+                                         [styles.clickable]: typeof this.props.onClickLogo !== 'undefined'
+                                     })}
+                                     draggable={false}
+                                     src={this.props.logo}
+-                                    onClick={this.props.onClickLogo}
++                                    onClick={() => window.open("https://github.com/KevinKevinsonBooyah/Bark", "_blank", "noopener")}
+                                 />
+                             </div>
+                         ) : null}
+@@ -548,14 +548,14 @@ class MenuBar extends React.Component {
+                                     onRequestClose={this.props.onRequestCloseErrors}
+                                 >
+                                     <MenuSection>
+-                                        <MenuItemLink href="https://discord.gg/NZ9MBMYTZh">
++                                        <MenuItemLink href="https://github.com/KevinKevinsonBooyah/Bark/issues">
+                                             <FormattedMessage
+                                                 defaultMessage="Some scripts could not be compiled."
+                                                 description="Link in error menu"
+                                                 id="tw.menuBar.reportError1"
+                                             />
+                                         </MenuItemLink>
+-                                        <MenuItemLink href="https://discord.gg/NZ9MBMYTZh">
++                                        <MenuItemLink href="https://github.com/KevinKevinsonBooyah/Bark/issues">
+                                             <FormattedMessage
+                                                 defaultMessage="This is a bug. Please report it."
+                                                 description="Link in error menu"
+@@ -949,7 +949,7 @@ class MenuBar extends React.Component {
+                         ) : []))}
+                     </div>
+                     <div className={styles.menuBarItem}>
+-                        {this.props.isShowingProject && this.props.canEditTitle ?
++                        {false && this.props.isShowingProject && this.props.canEditTitle ?
+                             (<ShareButton
+                                 className={styles.menuBarButton}
+                                 isShared={this.props.isShared}
+@@ -959,15 +959,15 @@ class MenuBar extends React.Component {
+                     <div className={styles.menuBarItem}>
+                         <a
+                             className={styles.feedbackLink}
+-                            href="https://penguinmod.com"
++                            href="https://github.com/KevinKevinsonBooyah/Bark"
+                             rel="noopener noreferrer"
+                             target="_blank"
+                         >
+                             <Button className={styles.feedbackButton}>
+                                 <FormattedMessage
+-                                    defaultMessage="Back to Home"
++                                    defaultMessage="Source & Help"
+                                     description="Button to go back to the home page"
+-                                    id="pm.backToHomeButton"
++                                    id="bark.sourceHelp"
+                                 />
+                             </Button>
+                         </a>
+diff --git a/src/components/menu-bar/scratch-logo.svg b/src/components/menu-bar/scratch-logo.svg
+index 56e80fb38135884c1d30b4842a5576b37bfa4bff..4bc1dd9f47659748d94e2f514815fc4a9cf090d0 100644
+GIT binary patch
+literal 460
+zcmaix-A=<W4256CGB+U6<)@S~)Kp?`QjMgINSi5%mcrBHjNZ_jT||-X&pyXV7q26%
+zvs<FVDW%IhV>#zTt`9zpOmfZ{5eV6Srb(d?9AVOSoRY#?B3!M`C%-D>z=5hj$-W!G
+zSmzWz7-J~Z&e==Ua3)SP2<LBwvPK9LAL*j7MfRWDFhLpxd-=mCo5HX}<HM{l_%tN_
+zSjh$&5b|k1Ly$(%YIiesQj#<Z_I3v&s|70?+_OZE<Pk)3vy}9jpzJ_zNB!~@!T2Rr
+xW|*y`#7D4$dyceL6?L#?E9dQ*TTXqqhG>5@^|#ochVa#~GPv*9NQXYD{{<Z@hMoWb
+
+delta 80
+zcmX@ZTr@$$t1L6M+$q1pR>?pC43!khGgC@3Y?Ta^6f#mX(=$pyOgk<G1sg?OU7%1-
+cfkH}Zab|j+LT;*}g08L|myLdLS-Kq;0JZiOfB*mh
+
+diff --git a/src/containers/stage.jsx b/src/containers/stage.jsx
+index 9f9205e..c33addf 100644
+--- a/src/containers/stage.jsx
++++ b/src/containers/stage.jsx
+@@ -150,6 +150,7 @@ class Stage extends React.Component {
+         document.addEventListener('mouseup', this.onMouseUp);
+         document.addEventListener('touchmove', this.onTouchMove);
+         document.addEventListener('touchend', this.onTouchUp);
++        document.addEventListener('touchcancel', this.onTouchUp);
+         canvas.addEventListener('mousedown', this.onMouseDown);
+         canvas.addEventListener('touchstart', this.onTouchDown);
+         canvas.addEventListener('wheel', this.onWheel);
+@@ -160,6 +161,7 @@ class Stage extends React.Component {
+         document.removeEventListener('mouseup', this.onMouseUp);
+         document.removeEventListener('touchmove', this.onTouchMove);
+         document.removeEventListener('touchend', this.onTouchUp);
++        document.removeEventListener('touchcancel', this.onTouchUp);
+         canvas.removeEventListener('mousedown', this.onMouseDown);
+         canvas.removeEventListener('touchstart', this.onTouchDown);
+         canvas.removeEventListener('wheel', this.onWheel);
+@@ -293,48 +295,38 @@ class Stage extends React.Component {
+         }
+     }
+     correctTouchPosition (touch) {
+-        const x = touch.clientX;
+-        const y = touch.clientY;
+-        const mousePosition = [x - this.rect.left, y - this.rect.top];
+-        touch.x = mousePosition[0];
+-        touch.y = mousePosition[1];
+-        return touch;
++        return {identifier: this.barkTouchSlots.get(touch.identifier),
++            x: touch.clientX - this.rect.left, y: touch.clientY - this.rect.top};
+     }
+-    onTouchDown (e) {
++    postBarkTouches (e, isDown) {
+         this.updateRect();
+-        const data = {
+-            isDown: true,
+-            canvasWidth: this.rect.width,
+-            canvasHeight: this.rect.height,
+-            changedTouches: this.elementListToArray(e.changedTouches).map(this.correctTouchPosition),
+-            targetTouches: this.elementListToArray(e.targetTouches).map(this.correctTouchPosition),
+-            touches: this.elementListToArray(e.touches).map(this.correctTouchPosition)
+-        };
+-        this.props.vm.postIOData('touch', data);
+-        this.onMouseDown(e);
++        if (!this.barkTouchSlots) this.barkTouchSlots = new Map();
++        const changed = Array.from(e.changedTouches);
++        if (isDown === true) {
++            changed.forEach(touch => {
++                if (this.barkTouchSlots.has(touch.identifier)) return;
++                const used = Array.from(this.barkTouchSlots.values());
++                const slot = [0, 1, 2, 3, 4].find(i => !used.includes(i));
++                if (typeof slot === 'number') this.barkTouchSlots.set(touch.identifier, slot);
++            });
++        }
++        const mapped = changed.filter(t => this.barkTouchSlots.has(t.identifier)).map(this.correctTouchPosition);
++        if (!mapped.length) return false;
++        this.props.vm.postIOData('touch', {
++            isDown, canvasWidth: this.rect.width, canvasHeight: this.rect.height,
++            changedTouches: mapped
++        });
++        if (isDown === false) changed.forEach(t => this.barkTouchSlots.delete(t.identifier));
++        return true;
++    }
++    onTouchDown (e) {
++        if (this.postBarkTouches(e, true)) this.onMouseDown(e);
+     }
+     onTouchUp (e) {
+-        const data = {
+-            isDown: false,
+-            canvasWidth: this.rect.width,
+-            canvasHeight: this.rect.height,
+-            changedTouches: this.elementListToArray(e.changedTouches).map(this.correctTouchPosition),
+-            targetTouches: this.elementListToArray(e.targetTouches).map(this.correctTouchPosition),
+-            touches: this.elementListToArray(e.touches).map(this.correctTouchPosition)
+-        };
+-        this.props.vm.postIOData('touch', data);
+-        this.onMouseUp(e);
++        if (this.postBarkTouches(e, false)) this.onMouseUp(e);
+     }
+     onTouchMove (e) {
+-        const coordinates = {
+-            canvasWidth: this.rect.width,
+-            canvasHeight: this.rect.height,
+-            changedTouches: this.elementListToArray(e.changedTouches).map(this.correctTouchPosition),
+-            targetTouches: this.elementListToArray(e.targetTouches).map(this.correctTouchPosition),
+-            touches: this.elementListToArray(e.touches).map(this.correctTouchPosition)
+-        };
+-        this.props.vm.postIOData('touch', coordinates);
+-        this.onMouseMove(e);
++        if (this.postBarkTouches(e)) this.onMouseMove(e);
+     }
+     onMouseDown (e) {
+         this.updateRect();
+diff --git a/src/lib/pm-log-capture.js b/src/lib/pm-log-capture.js
+index e5991ad..f27addb 100644
+--- a/src/lib/pm-log-capture.js
++++ b/src/lib/pm-log-capture.js
+@@ -222,7 +222,7 @@ class StackTrace extends Error {
+         }
+     }
+ }
+-if (!(new URLSearchParams(location.search).has('nologcapture')) && (!String(window.location.href).startsWith(`http://localhost:`) || new URLSearchParams(location.search).has('nolivetests'))) {
++if (false && !(new URLSearchParams(location.search).has('nologcapture')) && (!String(window.location.href).startsWith(`http://localhost:`) || new URLSearchParams(location.search).has('nolivetests'))) {
+     for (const name of ['log', 'warn', 'error', 'debug', 'info']) {
+         const item = window.console[name];
+         window.console[name] = (...args) => {
+diff --git a/src/lib/tw-state-manager-hoc.jsx b/src/lib/tw-state-manager-hoc.jsx
+index 6a922a0..8489479 100644
+--- a/src/lib/tw-state-manager-hoc.jsx
++++ b/src/lib/tw-state-manager-hoc.jsx
+@@ -113,8 +113,8 @@ class FileHashRouter extends HashRouter {
+     onpathchange () {
+         const pathName = location.pathname;
+ 
+-        if (pathName === this.playerPath) {
+-            this.onSetIsPlayerOnly(true);
++        if (pathName === this.playerPath || pathName === `${this.playerPath}index.html`) {
++            this.onSetIsPlayerOnly(false);
+             this.onSetIsFullScreen(false);
+         } else if (pathName === this.editorPath) {
+             this.onSetIsPlayerOnly(false);
+diff --git a/src/lib/tw-theme-hoc.jsx b/src/lib/tw-theme-hoc.jsx
+index 33379c0..0ecc7cb 100644
+--- a/src/lib/tw-theme-hoc.jsx
++++ b/src/lib/tw-theme-hoc.jsx
+@@ -14,7 +14,7 @@ export const getInitialDarkMode = () => {
+     } catch (e) {
+         // ignore
+     }
+-    return darkMediaQuery.matches;
++    return true;
+ };
+ 
+ const darkModeStylesheet = document.createElement('style');
+diff --git a/src/playground/index.ejs b/src/playground/index.ejs
+index f9d1a12..ab2a263 100644
+--- a/src/playground/index.ejs
++++ b/src/playground/index.ejs
+@@ -2,12 +2,12 @@
+ <html>
+   <head>
+     <meta charset="UTF-8">
+-    <meta name="viewport" content="width=device-width, initial-scale=1">
++    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+     <meta name="google" value="notranslate">
+-    <meta name="description" content="PenguinMod is a TurboWarp mod that was made to add tons of cool stuff to allow for crazy projects." />
++    <meta name="description" content="Bark is a visual game creation studio powered by PenguinMod, TurboWarp and Scratch." />
+     <title><%= htmlWebpackPlugin.options.title %></title>
+     <link rel="apple-touch-icon" href="<%= htmlWebpackPlugin.options.root %>images/apple-touch-icon.png">
+-    <link rel="icon" type="image/x-icon" href="./penguinmod.github.io/favicon.ico">
++    <link rel="icon" type="image/svg+xml" href="<%= htmlWebpackPlugin.options.root %>bark-icon.svg">
+     <% if (htmlWebpackPlugin.options.root === "/" || htmlWebpackPlugin.options.root === "") { %>
+       <link rel="manifest" href="<%= htmlWebpackPlugin.options.root %>manifest.webmanifest">
+     <% } %>
+@@ -30,15 +30,7 @@
+       }
+     </style>
+ 
+-    <!-- Google tag (gtag.js) -->
+-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-JEVT078EB6"></script>
+-    <script>
+-    window.dataLayer = window.dataLayer || [];
+-    function gtag(){dataLayer.push(arguments);}
+-    gtag('js', new Date());
+-
+-    gtag('config', 'G-JEVT078EB6');
+-    </script>
++    <link rel="stylesheet" href="<%= htmlWebpackPlugin.options.root %>bark.css">
+   </head>
+   <body>
+     <div id="splash" aria-hidden="true">
+@@ -54,7 +46,7 @@
+         document.querySelector('#splash-content').style.display = 'block';
+         <% if (!htmlWebpackPlugin.options.noTheme) { %>
+         try {var localTheme = localStorage.getItem('tw:theme');} catch (e) {}
+-        if (localTheme ? localTheme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches) document.querySelector('#splash').setAttribute('splash-theme', 'dark');
++        if (localTheme ? localTheme === 'dark' : true) document.querySelector('#splash').setAttribute('splash-theme', 'dark');
+         <% } %>
+       })();
+     </script>
+diff --git a/src/playground/interface.css b/src/playground/interface.css
+index 37fdd6b..d98de1c 100644
+--- a/src/playground/interface.css
++++ b/src/playground/interface.css
+@@ -43,8 +43,8 @@ a {
+ }
+ 
+ .editor {
+-    min-width: 1024px;
+-    min-height: 640px;
++    min-width: 0;
++    min-height: 0;
+     height: 100%;
+ }
+ .editor .center {
+diff --git a/src/playground/render-gui.jsx b/src/playground/render-gui.jsx
+index 170dd13..cc5c89d 100644
+--- a/src/playground/render-gui.jsx
++++ b/src/playground/render-gui.jsx
+@@ -2,7 +2,7 @@ import React from 'react';
+ import GUI from '../containers/gui.jsx';
+ 
+ const searchParams = new URLSearchParams(location.search);
+-const cloudHost = searchParams.get('cloud_host') || 'wss://clouddata.turbowarp.org';
++const cloudHost = searchParams.get('cloud_host') || null;
+ 
+ const RenderGUI = props => (
+     <GUI
+@@ -10,7 +10,7 @@ const RenderGUI = props => (
+         canSave={false}
+         basePath={process.env.ROOT}
+         canEditTitle
+-        enableCommunity
++        enableCommunity={false}
+         {...props}
+     />
+ );
+diff --git a/src/playground/render-interface.jsx b/src/playground/render-interface.jsx
+index a11e8b2..2fe8afc 100644
+--- a/src/playground/render-interface.jsx
++++ b/src/playground/render-interface.jsx
+@@ -274,9 +274,9 @@ class Interface extends React.Component {
+     }
+     handleUpdateProjectTitle (title, isDefault) {
+         if (isDefault || !title) {
+-            document.title = `PenguinMod - ${this.props.intl.formatMessage(messages.defaultTitle)}`;
++            document.title = `Bark - ${this.props.intl.formatMessage(messages.defaultTitle)}`;
+         } else {
+-            document.title = `${title} - PenguinMod`;
++            document.title = `${title} - Bark`;
+         }
+     }
+     copyProjectLink (id) {
+diff --git a/static/bark-icon.svg b/static/bark-icon.svg
+new file mode 100644
+index 0000000000000000000000000000000000000000..4216891243a7148841a2a078fe691e0889fee83d
+GIT binary patch
+literal 363
+zcmaiw+X})k42EAN#2dY_-3bq@yYNl6S=&N&(iJ=3-oz=07Yc!-;p59s>+xn_I{VA0
+z(8hS(3z1S<r(!(>BXTLFAOhj$bUF-^LJ1N|E^O+c`v}P$qg6-?u-X|L=Q$9Y(eC8D
+zSGdTkZP#@un%Y1N?PWX-;jHjE`Znri3B~G7C+ngnzxLi;M-4r@Dun*7FfS0;y`x6Y
+s4J$vn7nbESR?b-Ujb)@^-R3uzlZLVFAB@s4#vwV}=T%{vn*XqQ0G&x_a{vGU
+
+literal 0
+HcmV?d00001
+
+diff --git a/static/bark.css b/static/bark.css
+new file mode 100644
+index 0000000..e028380
+--- /dev/null
++++ b/static/bark.css
+@@ -0,0 +1,87 @@
++html,body {overscroll-behavior:none;}
++body.bark-editor {overflow:hidden; user-select:none; -webkit-user-select:none;}
++input,textarea,[contenteditable=true] {user-select:text; -webkit-user-select:text;}
++#bark-tools {height:38px;box-sizing:border-box;display:flex;align-items:center;gap:4px;padding:3px 8px;background:#202329;color:#eee;border-bottom:1px solid #101216;font:12px Arial,sans-serif;white-space:nowrap;position:relative;z-index:8;}
++#bark-tools button,#bark-tools select,.bark-dialog button {border:1px solid #48505b;border-radius:4px;color:#f4f5f7;background:#303640;min-height:30px;padding:4px 9px;font:inherit;cursor:pointer;}
++#bark-tools button:hover,.bark-dialog button:hover {background:#435366;border-color:#39bce9;}
++#bark-tools button:focus-visible,.bark-dialog button:focus-visible {outline:2px solid #55d3ff;outline-offset:1px;}
++#bark-tools button:disabled {opacity:.5;cursor:wait;}
++#bark-tools .bark-run {color:#80e6a3;}
++#bark-tools .bark-stop {color:#ff9b9b;}
++.bark-divider {height:20px;border-left:1px solid #4b515b;margin:0 4px;}
++.bark-search {display:flex;min-width:100px;max-width:205px;margin-left:5px;}
++.bark-search input {width:100%;min-width:40px;border:1px solid #48505b;border-radius:4px 0 0 4px;background:#15191e;color:white;padding:5px 8px;font:inherit;}
++.bark-status {margin-left:auto;font-size:11px;color:#b2bcc8;overflow:hidden;text-overflow:ellipsis;}
++#bark-tools .bark-recover {background:#147ca5;color:white;}
++.bark-modal-overlay {position:fixed;inset:0;background:#0009;z-index:100000;display:flex;justify-content:center;align-items:center;padding:10px;}
++.bark-dialog {background:#252a31;color:#edf0f5;font:14px/1.5 Arial,sans-serif;max-width:640px;width:100%;max-height:calc(100dvh - 20px);border-radius:6px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 12px 50px #0006;}
++.bark-dialog header {display:flex;align-items:center;justify-content:space-between;background:#138dbb;padding:10px 16px;flex:none;}
++.bark-dialog h2 {font-size:18px;margin:0;}
++.bark-dialog-body {overflow:auto;padding:16px 22px;}
++.bark-dialog p {margin:0 0 14px;}
++.bark-dialog a {color:#70d8ff;}
++.bark-dialog label {display:block;margin-bottom:14px;}
++.bark-saved-project {display:flex;align-items:center;gap:8px;padding:12px 0;border-top:1px solid #454c57;}
++.bark-saved-project>div {flex:1;min-width:0;overflow-wrap:anywhere;}
++.bark-saved-project small {display:block;color:#a7b3c4;}
++#bark-rotate {display:none;}
++.bark-hide-stage [class*="gui_stage-and-target-wrapper"] {display:none!important;}
++.bark-hide-sprites [class*="gui_target-wrapper"] {display:none!important;}
++.bark-reduced-motion *, .bark-reduced-motion *:before,.bark-reduced-motion *:after {animation:none!important;transition:none!important;scroll-behavior:auto!important;}
++[class*="menu-bar_scratch-logo"] {width:100px!important;}
++[class*="modal_modal-content"], [class*="custom-procedures_modal-content"] {max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);}
++[class*="custom-procedures_modal-content"] {margin:12px auto!important;overflow-y:auto!important;}
++[class*="custom-procedures_workspace"] {min-height:120px!important;}
++[class*="custom-procedures_body"] {padding:14px 22px!important;}
++[class*="custom-procedures_option-card"] {padding:10px!important;}
++[class*="custom-procedures_color-picker-area"] {margin:10px 0!important;}
++[class*="custom-procedures_preset-color"], [class*="custom-procedures_parent-custom"] {width:26px!important;height:26px!important;}
++@media (max-width:1100px) {
++ .bark-status {display:none;}
++ [class*="menu-bar_feedbackLink"], [class*="menu-bar_language-menu"] {display:none!important;}
++ [class*="menu-bar_menu-bar-item"] {padding-left:5px!important;padding-right:5px!important;}
++ [class*="gui_editor-wrapper"] {flex-basis:0!important;min-width:0!important;}
++ [class*="gui_stage-and-target-wrapper"] {max-width:260px;overflow:auto;}
++ [class*="gui_tab"] {padding-left:10px!important;padding-right:10px!important;}
++}
++@media (max-width:1000px) and (orientation:landscape) {
++ #bark-tools {padding-left:max(5px,env(safe-area-inset-left));padding-right:max(5px,env(safe-area-inset-right));gap:3px;}
++ #bark-tools button {padding:4px 7px;}
++ #bark-tools .bark-search {max-width:130px;}
++ [class*="menu-bar_menu-bar"] {height:40px!important;}
++ [class*="gui_body-wrapper"] {height:calc(100% - 78px)!important;}
++ [class*="menu-bar_scratch-logo"] {width:76px!important;}
++ [class*="menu-bar_divider"], [class*="menu-bar_account-info-group"] {display:none!important;}
++ [class*="gui_target-wrapper"] {min-height:170px!important;}
++ [class*="custom-procedures_modal-content"] {margin:6px auto!important;max-height:calc(100dvh - 12px);}
++ [class*="custom-procedures_workspace"] {min-height:80px!important;}
++ [class*="custom-procedures_body"] {padding:8px 14px!important;}
++ [class*="custom-procedures_option-icon"] {max-height:27px!important;margin-bottom:3px!important;}
++ [class*="custom-procedures_option-card"] {font-size:11px;padding:6px!important;}
++ [class*="custom-procedures_color-picker-area"] {margin:6px 0!important;padding:4px!important;}
++ [class*="custom-procedures_preset-color"], [class*="custom-procedures_parent-custom"] {width:22px!important;height:22px!important;margin:3px!important;}
++ [class*="custom-procedures_button-row"] {margin-top:7px!important;}
++ [class*="custom-procedures_button-row"] button {padding:8px 16px!important;}
++}
++@media (max-width:760px) and (orientation:landscape) {
++ #bark-tools .bark-search {display:none;}
++ #bark-tools .bark-run span,#bark-tools .bark-stop span {display:none;}
++ #bark-tools {font-size:11px;}
++}
++@media (max-width:700px) and (orientation:portrait) and (pointer:coarse) {
++ #bark-rotate {position:fixed;inset:0;z-index:999999;background:#1d2128;color:#f1f6fb;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:32px;font:15px/1.6 Arial,sans-serif;}
++ #bark-rotate h1 {font-size:22px;letter-spacing:1px;margin:20px 0 10px;}
++ .bark-phone {font-size:110px;color:#51c5ed;animation:bark-rotate-phone 3s ease-in-out infinite;line-height:1;}
++}
++@keyframes bark-rotate-phone {0%,20%{transform:rotate(0deg)}50%,85%{transform:rotate(90deg)}100%{transform:rotate(0deg)}}
++@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;}}
++#bark-tools {overflow-x:auto;scrollbar-width:thin;}
++#bark-tools>* {flex-shrink:0;}
++#bark-tools .bark-search {flex-shrink:1;}
++@media (max-height:600px) {
++ [class*="custom-procedures_modal-content"] {overflow:hidden!important;}
++ [class*="custom-procedures_modal-content"]>div {max-height:calc(100dvh - 24px);display:flex;flex-direction:column;}
++ [class*="custom-procedures_workspace"] {flex:0 0 80px;min-height:80px!important;}
++ [class*="custom-procedures_body"] {overflow-y:auto;min-height:0;}
++ [class*="custom-procedures_modal-content"] [class*="modal_header"] {flex-shrink:0;}
++}
+diff --git a/webpack.config.js b/webpack.config.js
+index ccfa18a..41199a6 100644
+--- a/webpack.config.js
++++ b/webpack.config.js
+@@ -150,6 +150,7 @@ module.exports = [
+             ])
+         },
+         optimization: {
++            minimizer: [new (require("terser-webpack-plugin"))({parallel: false, cache: true})],
+             splitChunks: {
+                 chunks: 'all',
+                 minChunks: 2,
+@@ -168,23 +169,23 @@ module.exports = [
+             }),
+             new HtmlWebpackPlugin({
+                 chunks: ['editor'], template: 'src/playground/index.ejs', filename: 'editor.html',
+-                title: 'PenguinMod - Editor', ...htmlWebpackPluginCommon
++                title: 'Bark - Editor', ...htmlWebpackPluginCommon
+             }),
+             new HtmlWebpackPlugin({
+                 chunks: ['playground'], template: 'src/playground/index.ejs', filename: 'playground.html',
+-                title: 'PenguinMod - Playground', ...htmlWebpackPluginCommon
++                title: 'Bark - Playground', ...htmlWebpackPluginCommon
+             }),
+             new HtmlWebpackPlugin({
+-                chunks: ['player'], template: 'src/playground/index.ejs', filename: 'index.html',
+-                title: 'PenguinMod - A mod of TurboWarp', ...htmlWebpackPluginCommon
++                chunks: ['editor'], template: 'src/playground/index.ejs', filename: 'index.html',
++                title: 'Bark - A mod of TurboWarp', ...htmlWebpackPluginCommon
+             }),
+             new HtmlWebpackPlugin({
+                 chunks: ['fullscreen'], template: 'src/playground/index.ejs', filename: 'fullscreen.html',
+-                title: 'PenguinMod - A mod of TurboWarp', ...htmlWebpackPluginCommon
++                title: 'Bark - A mod of TurboWarp', ...htmlWebpackPluginCommon
+             }),
+             new HtmlWebpackPlugin({
+                 chunks: ['embed'], template: 'src/playground/index.ejs', filename: 'embed.html',
+-                title: 'Embedded Project - PenguinMod', noTheme: true, ...htmlWebpackPluginCommon
++                title: 'Embedded Project - Bark', noTheme: true, ...htmlWebpackPluginCommon
+             }),
+             new HtmlWebpackPlugin({
+                 chunks: ['addon-settings'], template: 'src/playground/simple.ejs', filename: 'addons.html',
+@@ -192,12 +193,12 @@ module.exports = [
+             }),
+             new HtmlWebpackPlugin({
+                 chunks: ['credits'], template: 'src/playground/simple.ejs', filename: 'credits.html',
+-                title: 'PenguinMod & TurboWarp Credits', noSplash: true, ...htmlWebpackPluginCommon
++                title: 'Bark & TurboWarp Credits', noSplash: true, ...htmlWebpackPluginCommon
+             }),
+             new CopyWebpackPlugin({ patterns: [{ from: 'static', to: '' }] }),
+             new CopyWebpackPlugin({ patterns: [{ from: 'node_modules/scratch-blocks/media', to: 'static/blocks-media' }] }),
+             new CopyWebpackPlugin({ patterns: [{ from: 'extensions/**', to: 'static', context: 'src/examples' }] }),
+-            new TWGenerateServiceWorkerPlugin()
++            // Bark uses explicit saves and recovery; no stale service worker.
+         ])
+     })
+ ];

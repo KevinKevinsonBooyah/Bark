@@ -1,0 +1,12 @@
+{
+  "PenguinMod-MarkDown": "https://codeload.github.com/PenguinMod/PenguinMod-MarkDown/tar.gz/ae5971c234a9d13a8886bb3edcec3df5ceffab34",
+  "scratch-audio": "https://codeload.github.com/PenguinMod/PenguinMod-Audio/tar.gz/a60d7b212241a456a7b8f103a0912085ba4593a3",
+  "scratch-blocks": "https://codeload.github.com/PenguinMod/PenguinMod-Blocks/tar.gz/be1bfbee757d62b7dc9733929880d471f974aee3",
+  "scratch-paint": "https://codeload.github.com/PenguinMod/PenguinMod-Paint/tar.gz/6083d544dc5ae6ac0bb8f05e0e2b5a7e8c6bf55b",
+  "scratch-parser": "https://codeload.github.com/PenguinMod/PenguinMod-Parser/tar.gz/ad93a6d0d20bcb4374e531ecf20b87b861faf9fb",
+  "scratch-render": "https://codeload.github.com/PenguinMod/PenguinMod-Render/tar.gz/e2daa21a2c11e77ed7f264df64896a5dbb73fefd",
+  "scratch-render-fonts": "https://codeload.github.com/PenguinMod/penguinmod-render-fonts/tar.gz/4dda62c707f64505266aa62f7a6cc84f0e5812fd",
+  "scratch-storage": "https://codeload.github.com/PenguinMod/PenguinMod-Storage/tar.gz/687019085e83fc83d39f3b96b41f229e8d95d6bc",
+  "scratch-svg-renderer": "https://codeload.github.com/PenguinMod/penguinmod-svg-renderer/tar.gz/62a2be1e440ff6993cf5a5f5fac6f8ac60423bfb",
+  "scratch-vm": "https://codeload.github.com/PenguinMod/PenguinMod-Vm/tar.gz/ebee2b9f8a5e67f3d7cf5031b0dd8dc82a9d0bdf"
+}

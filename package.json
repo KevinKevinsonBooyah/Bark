@@ -1,0 +1,12 @@
+{
+  "name": "bark",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0",
+  "description": "Bark visual game creation studio",
+  "scripts": {
+    "bootstrap": "node scripts/bootstrap.cjs",
+    "test": "cd engine && node scripts/runtime-tests.cjs",
+    "build": "cd engine && npm run build"
+  }
+}
