@@ -1,12 +1,1 @@
-{
-  "name": "bark",
-  "version": "0.1.0",
-  "private": true,
-  "license": "GPL-3.0",
-  "description": "Bark visual game creation studio",
-  "scripts": {
-    "bootstrap": "node scripts/bootstrap.cjs",
-    "test": "cd engine && node scripts/runtime-tests.cjs",
-    "build": "cd engine && npm run build"
-  }
-}
+{"name":"bark-studio","version":"1.0.0","private":true,"type":"module","scripts":{"test":"node --test tests/*.test.mjs","start":"python3 -m http.server 4174"}}

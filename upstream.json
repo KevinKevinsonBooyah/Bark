@@ -1,6 +1,0 @@
-{
-  "repository": "https://github.com/PenguinMod/penguinmod.github.io.git",
-  "commit": "8d622ab3808c85413af85e1fac8ea7f6bb42a901",
-  "license": "GPL-3.0",
-  "description": "The complete editor source is materialized by scripts/bootstrap.cjs; bark.patch contains the Bark modifications. Exact dependency sources are pinned in engine-package-lock.json."
-}

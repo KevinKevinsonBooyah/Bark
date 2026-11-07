@@ -18,39 +18,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Materialize pinned PenguinMod source and Bark changes
-        run: node scripts/bootstrap.cjs
-      - name: Install pinned dependencies
-        working-directory: engine
-        run: npm ci --ignore-scripts --legacy-peer-deps
-      - name: Test real runtime
-        working-directory: engine
-        run: node scripts/runtime-tests.cjs
-      - name: Build for GitHub Pages
-        working-directory: engine
-        env:
-          CI: '1'
-          NODE_ENV: production
-          NODE_OPTIONS: --openssl-legacy-provider --max-old-space-size=6144
-          ROOT: /Bark/
-        run: npx webpack --bail
-      - name: Include corresponding editor source and licenses
-        run: |
-          tar --exclude=.git --exclude=node_modules --exclude=build --exclude=.webpack --exclude=translations -czf /tmp/bark-source.tar.gz -C engine .
-          mkdir -p engine/build/source
-          cp /tmp/bark-source.tar.gz engine/build/source/bark-source.tar.gz
-          cp LICENSE THIRD_PARTY.md upstream.json upstream-dependencies.json engine/build/source/
-          cp README.md engine/build/README.md
-          touch engine/build/.nojekyll
-      - name: Check deployed asset references
-        run: node scripts/check-build.cjs
-      - uses: actions/upload-artifact@v4
-        with:
-          name: bark-production
-          path: engine/build
+      - name: Test original Bark runtime
+        run: npm test
+      - name: Build original Bark studio
+        run: node build.mjs
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: engine/build
+          path: dist
   deploy:
     needs: build
     runs-on: ubuntu-latest
@@ -58,10 +32,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
+      - uses: actions/configure-pages@v5
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
