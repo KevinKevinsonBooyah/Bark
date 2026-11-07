@@ -2,12 +2,12 @@ from pathlib import Path
 import json, hashlib, zipfile, copy, wave, math, io, struct
 out=Path('static/samples');out.mkdir(parents=True,exist_ok=True)
 dog='''<svg xmlns="http://www.w3.org/2000/svg" width="100" height="96" viewBox="0 0 100 96"><g stroke="#472e28" stroke-width="3" stroke-linejoin="round"><path d="M28 50 Q8 67 20 87 L31 86 L35 74 L63 74 L69 88 L80 87 Q92 65 72 49" fill="#d39251"/><path d="M26 27 Q5 11 6 37 Q5 57 24 52 M73 27 Q98 10 95 38 Q96 57 76 52" fill="#704737"/><path d="M21 33 Q20 9 49 10 Q79 10 80 35 L77 56 Q74 71 50 71 Q25 71 22 55Z" fill="#eeb778"/><ellipse cx="50" cy="52" rx="21" ry="15" fill="#ffe1ad"/><path d="M43 46 Q50 42 58 46 Q57 55 50 55 Q44 54 43 46" fill="#392a28"/><path d="M50 55 V60 M50 60 Q42 65 39 60 M50 60 Q58 65 62 60" fill="none"/><ellipse cx="34" cy="35" rx="3" ry="5" fill="#302529"/><ellipse cx="66" cy="35" rx="3" ry="5" fill="#302529"/><path d="M79 66 Q97 61 92 49" fill="none" stroke-width="7"/></g></svg>'''
-backdrop='<svg xmlns="http://www.w3.org/2000/svg" width="480" height="360"><rect width="480" height="360" fill="#f5f1e8"/><path d="M0 315H480" stroke="#dfd7c8" stroke-width="2"/></svg>'
+backdrop='<svg xmlns="http://www.w3.org/2000/svg" width="480" height="360"><rect width="480" height="360" fill="#ffffff"/></svg>'
 assets={}
 def costume(svg,name,cx,cy):
  data=svg.encode();h=hashlib.md5(data).hexdigest();assets[h+'.svg']=data
  return dict(assetId=h,md5ext=h+'.svg',dataFormat='svg',name=name,bitmapResolution=1,rotationCenterX=cx,rotationCenterY=cy)
-c=costume(dog,'Bark',50,48);bg=costume(backdrop,'Paper',240,180)
+c=costume(dog,'Bark',50,48);bg=costume(backdrop,'White',240,180)
 def base():
  stage=dict(isStage=True,name='Stage',variables={'score':['score',0]},lists={},broadcasts={'party':'party'},blocks={},comments={},currentCostume=0,costumes=[bg],sounds=[],volume=100,layerOrder=0,tempo=60,videoTransparency=50,videoState='off',textToSpeechLanguage=None)
  sprite=dict(isStage=False,name='Bark',variables={},lists={},broadcasts={},blocks={},comments={},currentCostume=0,costumes=[c],sounds=[],volume=100,layerOrder=1,visible=True,x=0,y=0,size=80,direction=90,draggable=False,rotationStyle='left-right')

@@ -47,3 +47,9 @@ The workflow builds on `main` and deploys to `/Bark/`. If GitHub rejects automat
 ## License and credits
 
 GPL-3.0. See [LICENSE](LICENSE) and [THIRD_PARTY.md](THIRD_PARTY.md). Original PenguinMod, TurboWarp, Scratch and Scratch Addons credit and licensing notices remain in the materialized source. Bark is independently modified and is not an official release of those projects.
+
+## Brown theme and phone workspace update
+
+Bark now uses walnut panels and caramel accents. Phones and narrow windows use separate Code, Stage and Sprites views in both orientations, with 44-pixel touch controls and a Tools drawer for project naming, saving and search. Run opens the Stage view. Fresh projects have a solid white backdrop. Stage geometry follows available viewport space and updates when changing views or rotating.
+
+Validation: production build, 11 headless runtime checks, and stage sizing at 320×568, 390×844, 844×390 and 768×1024. Browser WebGL is unavailable in the test environment, so real-device drag gestures and visual rendering still require validation.
