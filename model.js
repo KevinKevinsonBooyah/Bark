@@ -1,4 +1,4 @@
-import {extendCatalog} from './catalog.js?v=mobile-paint-2';
+import {extendCatalog} from './catalog.js?v=bark-dark-1';
 export const uid=()=>globalThis.crypto?.randomUUID?.()||Math.random().toString(36).slice(2);
 export const clone=v=>JSON.parse(JSON.stringify(v));
 export const groups={events:['Events','#b38328','⚑'],motion:['Motion','#4678bd','↗'],looks:['Looks','#9258b0','◉'],control:['Control','#bb782c','↻'],data:['Variables','#b45c41','𝑥'],sound:['Sound','#b64d83','♫'],custom:['My blocks','#578b70','✦']};

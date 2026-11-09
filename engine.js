@@ -1,9 +1,9 @@
-import {installRuntime,FLOW} from './runtime-extra.js?v=mobile-paint-2';
-import {clone} from './model.js?v=mobile-paint-2';
+import {installRuntime,FLOW} from './runtime-extra.js?v=bark-dark-1';
+import {clone} from './model.js?v=bark-dark-1';
 const STOP_SCRIPT=Symbol('stop script');
 export class Engine{
- constructor(project,{tone=()=>{},highlight=()=>{}}={}){this.source=project;this.tone=tone;this.highlight=highlight;this.pointer={x:0,y:0,down:false};this.keys=new Set();this.reset();}
- reset(){this.project=clone(this.source);this.tasks=[];this.running=false;this.time=0;this.error='';this.steps=0;}
+ constructor(project,{tone=()=>{},highlight=()=>{}}={}){this.source=project;this.tone=tone;this.highlight=highlight;this.pointer={x:0,y:0,down:false};this.keys=new Set();this.thumbDirections=new Set();this.inputMode='Key Input';this.reset();}
+ reset(){this.project=clone(this.source);this.tasks=[];this.running=false;this.time=0;this.error='';this.steps=0;this.inputMode='Key Input';this.thumbDirections.clear();}
  start(){this.reset();this.running=true;this.emit('start');}
  stop(){this.running=false;this.tasks=[];this.highlight(null);}
  edge(s){const r=32*s.size/100;return Math.abs(s.x)>=240-r||Math.abs(s.y)>=180-r;}
