@@ -1,7 +1,7 @@
-import {CostumeStudio} from './costume-tools.js';
-import {watchShape} from './block-shapes.js';
-import {uid,clone,groups,defs,block,fresh,sprite,example,validate,walk,locate,newIds,reporterDefs} from './model.js';
-import {Engine} from './engine.js';
+import {CostumeStudio} from './costume-tools.js?v=mobile-paint-2';
+import {watchShape} from './block-shapes.js?v=mobile-paint-2';
+import {uid,clone,groups,defs,block,fresh,sprite,example,validate,walk,locate,newIds,reporterDefs} from './model.js?v=mobile-paint-2';
+import {Engine} from './engine.js?v=mobile-paint-2';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 function el(tag,props={},...children){const n=document.createElement(tag);for(const [k,v] of Object.entries(props)){if(k==='class')n.className=v;else if(k==='text')n.textContent=v;else if(k.startsWith('on'))n.addEventListener(k.slice(2).toLowerCase(),v);else if(v!==undefined&&v!==false)n.setAttribute(k,v===true?'':v);}for(const c of children.flat())if(c!=null)n.append(c instanceof Node?c:document.createTextNode(String(c)));return n;}
 const STORE='bark:original-studio:v1';let project=fresh(),storageFailure=false;

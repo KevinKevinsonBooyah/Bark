@@ -1,5 +1,5 @@
-import {installRuntime,FLOW} from './runtime-extra.js';
-import {clone} from './model.js';
+import {installRuntime,FLOW} from './runtime-extra.js?v=mobile-paint-2';
+import {clone} from './model.js?v=mobile-paint-2';
 const STOP_SCRIPT=Symbol('stop script');
 export class Engine{
  constructor(project,{tone=()=>{},highlight=()=>{}}={}){this.source=project;this.tone=tone;this.highlight=highlight;this.pointer={x:0,y:0,down:false};this.keys=new Set();this.reset();}

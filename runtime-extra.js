@@ -1,4 +1,4 @@
-import {clone,uid,defs} from './model.js';
+import {clone,uid,defs} from './model.js?v=mobile-paint-2';
 export const FLOW={BREAK:Symbol('break'),CONTINUE:Symbol('continue')};
 export function installRuntime(Engine){
  const oldValue=Engine.prototype.value,oldReset=Engine.prototype.reset,oldTick=Engine.prototype.tick;
